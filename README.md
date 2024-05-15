@@ -38,7 +38,7 @@ executeDnsRedirectRules() {\
       },
       "tag": "tproxy-in"
     },
-    {
+    ***{
     // only listen IPv4
       "listen": "127.0.0.1",
       "port": 65534,
@@ -49,6 +49,6 @@ executeDnsRedirectRules() {\
         "port": 53
       },
       "tag": "dns-in"
-    }
+    }***
   ]
 }
