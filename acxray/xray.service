@@ -1,0 +1,198 @@
+#!/system/bin/sh
+# working dir
+  clear; cd "${0%/*}"
+# define color
+  normal=$(printf '\033[0m'); green=$(printf '\033[0;32m'); red=$(printf '\033[91m')
+# busybox dir
+  export PATH="/data/adb/magisk:/data/adb/ksu/bin:$PATH:/system/bin"
+# bin files
+  xray="${0%/*}/binary/xray"
+# config files
+  config_file="${0%/*}/confs/1f.json" # can modify
+# port
+  port=65535
+# gid
+  gid=10240
+  
+  mode="tproxy"
+  
+# blacklist
+  package_list=(com.ss.android.ugc.aweme com.eg.android.AlipayGphone com.ss.android.article.lite com.coloros.favorite com.oplus.consumerIRApp com.tencent.mm com.redteamobile.roaming com.tencent.mobileqq com.unionpay.tsmservice com.netease.l10 com.coloros.filemanager com.oneplus.member com.taobao.taobao com.heytap.health com.coloros.note com.autonavi.minimap com.oneplus.brickmode com.cebbank.mobile.cemb com.coloros.compass2 com.coloros.calendar com.heytap.smarthome com.nearme.gamecenter com.coloros.soundrecorder com.coloros.shortcuts com.heytap.music com.coloros.familyguard com.finshell.wallet com.oneplus.bbs com.vmos.pro com.heytap.yoli cmb.pb com.coloros.translate.engine tv.danmaku.bili com.baidu.baidutranslate com.baidu.homework com.ss.android.article.video com.coloros.calculator com.jingdong.app.mall com.coloros.weather2 com.oplus.games)
+  
+# IPv4 network segment
+  intranet=(0.0.0.0/8 10.0.0.0/8 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.168.0.0/16 224.0.0.0/3 255.255.255.255/32)
+# IPv6 network segment
+  intranet6=(::/128 ::1/128 2408:8000::/20 2409:8000::/20 240a:4000::/21 240e::/20 fc00::/7 fe80::/10 ff00::/8)
+  
+# IPv6 & IPv4
+  intranet+=($(ip -4 a | busybox awk '/inet/ && $2 !~ /^127.0.0.1/ {print $2}'))
+  intranet6+=($(ip -6 a | busybox awk '/inet6/ && $2 !~ /^(fe80|::1|fd00)/ {print $2}'))
+  
+  # check iptables_version
+  iptables_version=$(iptables --version | busybox awk '/^iptables/ {print $2}')
+  if busybox awk -v current_version="${iptables_version}" -v required_version="v1.6.1" 'BEGIN { exit !(current_version > required_version) }'; then
+    IPV="iptables -w 100"
+    IP6V="ip6tables -w 100"
+    else
+    IPV="iptables"
+    IP6V="ip6tables"
+  fi
+  
+# Version information
+  VERSION=$(${xray} version | busybox awk 'BEGIN{IGNORECASE=1} /xray/ {print $1, $2}')
+  echo $VERSION
+  
+# The main body of the script.
+uid_filter() {
+[ -f "uids.list" ] && rm "uids.list"
+uid=""; uids=""
+for package_name in ${package_list[@]}; do
+    uid=$(busybox awk -v package="${package_name}" '$0 ~ package {print $2}' /data/system/packages.list)
+    [ -n "${uid}" ] && uids+=("${uid}")
+    echo "${package_name}: ${uid}" >> ${0%/*}/uids.list
+done
+}
+
+start() {
+  if [ -f "${xray}" ]; then
+    chmod 755 ${xray}
+    chown root:root ${xray}
+    uid_filter
+    executeProxyRules
+    create_task
+    ulimit -SHn 1000000
+    busybox setuidgid 0:${gid} nohup ${xray} run -c ${config_file} > /dev/null 2>&1 &
+  fi
+}
+
+stop() {
+  PID=$(pidof ${xray})
+  pidof ${xray} > /dev/null 2>&1 && kill -15 ${PID} > /dev/null 2>&1
+  executeDeleteProxyRules
+  delete_task
+  rm ${0%/*}/*.list
+}
+
+
+createProxyRules() {
+  # Create routes and rules
+  ${1} rule add fwmark 1 table ${2}
+  ${1} route add local default dev lo table ${2}
+  # Create custom chain
+  ${3} -t mangle -N ${4}_EXTERNAL
+  ${3} -t mangle -N ${4}_LOCAL
+  ${3} -t mangle -N ${4}_QUIC_FILTER
+  ${3} -t mangle -N ${4}_DIVERT
+  # Create external custom chain rules
+for subnet in ${5}; do
+    if [[ "$subnet" == "192.168.0.0/16" ]]; then
+  ${3} -t mangle -A ${4}_EXTERNAL -d ${subnet} -p tcp -j RETURN
+  ${3} -t mangle -A ${4}_EXTERNAL -d ${subnet} -p udp ! --dport 53 -j RETURN
+    else
+  ${3} -t mangle -A ${4}_EXTERNAL -d ${subnet} -j RETURN
+    fi
+done
+  ${3} -t mangle -A ${4}_EXTERNAL -p tcp -j TPROXY --on-port ${port} --tproxy-mark 1
+  ${3} -t mangle -A ${4}_EXTERNAL -p udp -j TPROXY --on-port ${port} --tproxy-mark 1
+  # Create internal custom chain rules
+  ${3} -t mangle -A ${4}_LOCAL -m owner --gid-owner ${gid} -j RETURN
+for subnet in ${5}; do
+    if [[ "$subnet" == "192.168.0.0/16" ]]; then
+  ${3} -t mangle -A ${4}_LOCAL -d ${subnet} -p tcp -j RETURN
+  ${3} -t mangle -A ${4}_LOCAL -d ${subnet} -p udp ! --dport 53 -j RETURN
+    else
+  ${3} -t mangle -A ${4}_LOCAL -d ${subnet} -j RETURN
+    fi
+done
+# 🔴
+  for appid in ${6}; do
+    ${3} -t mangle -A ${4}_LOCAL -m owner --uid-owner ${appid} -p tcp -j RETURN
+    ${3} -t mangle -A ${4}_LOCAL -m owner --uid-owner ${appid} -p udp ! --dport 53 -j RETURN
+    ${3} -t mangle -A ${4}_LOCAL -m owner --uid-owner ${appid} -j RETURN
+  done
+  ${3} -t mangle -A ${4}_LOCAL -j MARK --set-mark 1
+  # Create QUIC_FILTER custom chain rules
+  ${3} -t mangle -A ${4}_QUIC_FILTER -p udp --dport 443 -j DROP
+  ${3} -t mangle -A ${4}_QUIC_FILTER -p udp --dport 80 -j DROP
+  # Prevent second entry into transparent proxy
+  ${3} -t mangle -A ${4}_DIVERT -j MARK --set-mark 1
+  ${3} -t mangle -A ${4}_DIVERT -j ACCEPT
+  # Referencing custom chains
+  ${3} -t mangle -A PREROUTING -j ${4}_EXTERNAL
+  ${3} -t mangle -I PREROUTING -p tcp -m socket -j ${4}_DIVERT
+  ${3} -t mangle -A OUTPUT -j ${4}_LOCAL
+  ${3} -t mangle -A OUTPUT -j ${4}_QUIC_FILTER
+  local list_name=$(echo ${3} | busybox awk '{print $1}')
+  ${3} -t mangle -L -nv > ${0%/*}/${list_name}_mangle_rules.list
+}
+executeProxyRules() {
+  createProxyRules ip 100 "${IPV}" Xray "${intranet[*]}" "${uids[*]}"
+  createProxyRules "ip -6" 106 "${IP6V}" Xray6 "${intranet6[*]}" "${uids[*]}"
+}
+deleteProxyRules() {
+  ${1} rule del fwmark 1 table ${2}
+  ${1} route del local default dev lo table ${2}
+  ${1} route flush table ${2}
+  # First, delete the reference chain, otherwise the custom chain cannot be deleted.
+  ${3} -t mangle -D PREROUTING -j ${4}_EXTERNAL
+  ${3} -t mangle -D PREROUTING -p tcp -m socket -j ${4}_DIVERT
+  ${3} -t mangle -D OUTPUT -j ${4}_LOCAL
+  ${3} -t mangle -D OUTPUT -j ${4}_QUIC_FILTER
+  # Secondly, delete the custom rules of the custom chain.
+  ${3} -t mangle -F ${4}_EXTERNAL
+  ${3} -t mangle -F ${4}_LOCAL
+  ${3} -t mangle -F ${4}_QUIC_FILTER
+  ${3} -t mangle -F ${4}_DIVERT
+  # Finally, delete the custom chain.
+  ${3} -t mangle -X ${4}_EXTERNAL
+  ${3} -t mangle -X ${4}_LOCAL
+  ${3} -t mangle -X ${4}_QUIC_FILTER
+  ${3} -t mangle -X ${4}_DIVERT
+}
+executeDeleteProxyRules() {
+  if iptables-save | grep "Xray" > /dev/null; then
+    deleteProxyRules ip 100 "${IPV}" Xray
+    deleteProxyRules "ip -6" 106 "${IP6V}" Xray6
+  fi
+}
+
+create_task() {
+  if pgrep busybox crond > /dev/null ; then
+    kill -9 $(pgrep busybox crond)
+  fi
+    echo "0 */2 * * * sh ${0%/*}/start.sh" > ${0%/*}/root
+    nohup busybox crond -c ${0%/*}/ > /dev/null 2>&1 &
+    echo -e "${green}New task:\n$(busybox crontab -l -c ${0%/*}/)${normal}"
+}
+
+delete_task() {
+  if pgrep busybox crond > /dev/null ; then
+    kill -9 $(pgrep busybox crond)
+    rm ${0%/*}/root > /dev/null 2>&1
+  fi
+}
+
+run() {
+  stop > /dev/null 2>&1
+  sysctl -w net.ipv4.conf.all.route_localnet=1 > /dev/null
+  start
+}
+
+# pid=$(pidof ${xray})
+ # if [ "$pid" != "" ]; then
+  # stop
+  # echo "${red}关闭${normal}"
+ # else
+  # run
+  # echo "${green}开启${normal}"
+ # fi
+ 
+net_ip() {
+  local_ip=$(ip route get 1.1.1.1 | awk '{for(i=1;i<=NF;i++) if ($i=="src") {print $(i+1); break}}') && echo "${local_ip}"
+}
+
+net_id() {
+# get wifi ssid
+  ssid=$(iw dev wlan0 link | grep -i ssid | awk '{for(i=1;i<=NF;i++) if ($i=="SSID:") {print $(i+1); break}}')
+  [ -z "$ssid" ] && echo "mobile" || echo "${ssid}"
+}
