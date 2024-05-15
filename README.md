@@ -14,7 +14,7 @@ executeDnsRedirectRules() {\
   iptables -t nat -I PREROUTING -j DNS_EXTERNAL\
   iptables -t nat -I OUTPUT -j DNS_LOCAL\
   iptables -t nat -L -nv > ${0%/*}/iptables_nat_rules.list\
-}\
+}
 
 {
   "inbounds": [
