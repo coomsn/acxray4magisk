@@ -9,6 +9,7 @@
   xray="${0%/*}/binary/xray"
 # config files
   config_file="${0%/*}/confs/1f.json" # can modify
+  config_dir="${0%/*}/confs/" # can modify
 # port
   port=65535
 # gid
@@ -58,21 +59,23 @@ start() {
     chmod 755 ${xray}
     chown root:root ${xray}
     uid_filter
+    executeDnsRedirectRules
     executeProxyRules
     create_task
     ulimit -SHn 1000000
-    busybox setuidgid 0:${gid} nohup ${xray} run -c ${config_file} > /dev/null 2>&1 &
+    nohup busybox setuidgid 0:${gid} ${xray} run -c ${config_file} > /dev/null 2>&1 &
+    # nohup busybox setuidgid 0:${gid} ${xray} run -confdir ${config_dir} > /dev/null 2>&1 &
   fi
 }
 
 stop() {
   PID=$(pidof ${xray})
   pidof ${xray} > /dev/null 2>&1 && kill -15 ${PID} > /dev/null 2>&1
-  executeDeleteProxyRules
+  executeDeleteProxyRules > /dev/null 2>&1
   delete_task
   rm ${0%/*}/*.list
+  rm ${0%/*}/logs/*.log
 }
-
 
 createProxyRules() {
   # Create routes and rules
@@ -148,6 +151,18 @@ deleteProxyRules() {
   ${3} -t mangle -X ${4}_LOCAL
   ${3} -t mangle -X ${4}_QUIC_FILTER
   ${3} -t mangle -X ${4}_DIVERT
+  
+  if [[ "${3}" == *iptables* ]]; then
+  # First, delete the reference chain, otherwise the custom chain cannot be deleted.
+  iptables -t nat -D PREROUTING -j DNS_EXTERNAL
+  iptables -t nat -D OUTPUT -j DNS_LOCAL
+  # Secondly, delete the custom rules of the custom chain.
+  iptables -t nat -F DNS_EXTERNAL
+  iptables -t nat -F DNS_LOCAL
+  # Finally, delete the custom chain.
+  iptables -t nat -X DNS_EXTERNAL
+  iptables -t nat -X DNS_LOCAL
+  fi
 }
 executeDeleteProxyRules() {
   if iptables-save | grep "Xray" > /dev/null; then
@@ -160,7 +175,7 @@ create_task() {
   if pgrep busybox crond > /dev/null ; then
     kill -9 $(pgrep busybox crond)
   fi
-    echo "0 */2 * * * sh ${0%/*}/start.sh" > ${0%/*}/root
+    echo "0 */12 * * * touch /data/adb/modules/xray-module/disable && sleep 3 && rm /data/adb/modules/xray-module/disable" > ${0%/*}/root
     nohup busybox crond -c ${0%/*}/ > /dev/null 2>&1 &
     echo -e "${green}New task:\n$(busybox crontab -l -c ${0%/*}/)${normal}"
 }
@@ -195,4 +210,20 @@ net_id() {
 # get wifi ssid
   ssid=$(iw dev wlan0 link | grep -i ssid | awk '{for(i=1;i<=NF;i++) if ($i=="SSID:") {print $(i+1); break}}')
   [ -z "$ssid" ] && echo "mobile" || echo "${ssid}"
+}
+
+executeDnsRedirectRules() {
+  iptables -t nat -N DNS_EXTERNAL
+  iptables -t nat -N DNS_LOCAL
+  iptables -t nat -A DNS_EXTERNAL -p udp -m udp --dport 53 -j REDIRECT --to-port 65534
+  iptables -t nat -A DNS_EXTERNAL -p tcp -m tcp --dport 53 -j REDIRECT --to-port 65534
+  iptables -t nat -A DNS_EXTERNAL -d 198.18.0.1/16 -p icmp -j DNAT --to-destination 127.0.0.1
+  iptables -t nat -A DNS_LOCAL -m owner --gid-owner ${gid} -j RETURN
+  iptables -t nat -A DNS_LOCAL -p udp -m udp --dport 53 -j REDIRECT --to-port 65534
+  iptables -t nat -A DNS_LOCAL -p tcp -m tcp --dport 53 -j REDIRECT --to-port 65534
+  iptables -t nat -A DNS_LOCAL -d 198.18.0.1/16 -p icmp -j DNAT --to-destination 127.0.0.1
+  
+  iptables -t nat -I PREROUTING -j DNS_EXTERNAL
+  iptables -t nat -I OUTPUT -j DNS_LOCAL
+  iptables -t nat -L -nv > ${0%/*}/iptables_nat_rules.list
 }
