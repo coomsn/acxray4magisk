@@ -16,4 +16,39 @@ executeDnsRedirectRules() {\
   iptables -t nat -L -nv > ${0%/*}/iptables_nat_rules.list\
 }\
 
-
+{
+  "inbounds": [
+    {
+      "listen": "::",
+      "port": 65535,
+      "protocol": "dokodemo-door",
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["fakedns"],
+        "metadataOnly": false
+      },
+      "settings": {
+        "network": "tcp,udp",
+        "followRedirect": true
+      },
+      "streamSettings": {
+        "sockopt": {
+          "tproxy": "tproxy"
+        }
+      },
+      "tag": "tproxy-in"
+    },
+    {
+    // only listen IPv4
+      "listen": "127.0.0.1",
+      "port": 65534,
+      "protocol": "dokodemo-door",
+      "settings": {
+        "address": "1.1.1.1",
+        "network": "tcp,udp",
+        "port": 53
+      },
+      "tag": "dns-in"
+    }
+  ]
+}
