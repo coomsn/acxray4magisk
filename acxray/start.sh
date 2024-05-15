@@ -1,6 +1,6 @@
 #!/system/bin/sh
 MODDIR="/data/adb/modules/acxray-module"
-SCRIPTS_DIR="/data/adb/acxray" #####
+SCRIPTS_DIR="/data/adb/acxray" # be careful
 busybox="/data/adb/magisk/busybox"
 normal="\033[0m"
 green="\033[0;32m"
