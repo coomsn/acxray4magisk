@@ -13,7 +13,9 @@
       "sniffing": {
         "enabled": true,
         "destOverride": [
-          "fakedns"
+          "fakedns",
+          "http",
+          "tls"
         ],
         "metadataOnly": false
       },
