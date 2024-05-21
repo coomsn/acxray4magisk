@@ -1,0 +1,86 @@
+{
+  "routing": {
+    "domainStrategy": "IPIfNonMatch",
+    "domainMatcher": "hybrid",
+    "geosite:category-ads-all": "127.0.0.1",
+    "rules": [
+      {
+        "inboundTag": [
+          "tproxy-in"
+        ],
+        "network": "udp",
+        "port": 53,
+        "outboundTag": "dns-out",
+        "type": "field"
+      },
+      {
+        "ip": [
+          "8.8.8.8",
+          "8.8.4.4"
+        ],
+        "outboundTag": "proxy",
+        "type": "field"
+      },
+      {
+        "ip": [
+          "223.5.5.5",
+          "223.6.6.6"
+        ],
+        "outboundTag": "direct",
+        "type": "field"
+      },
+      {
+        "domains": [
+          "geosite:category-ads-all"
+        ],
+        "outboundTag": "block",
+        "type": "field"
+      },
+      {
+        "type": "field",
+        "domain": [
+          "geosite:openai"
+        ],
+        "outboundTag": "unlock"
+      },
+      {
+        "domain": [
+          "domain:googleapis.cn",
+          "geosite:github"
+        ],
+        "outboundTag": "proxy",
+        "type": "field"
+      },
+      {
+        "type": "field",
+        "outboundTag": "direct",
+        "protocol": [
+          "bittorrent"
+        ]
+      },
+      {
+        "domains": [
+          "geosite:cn",
+          "geosite:private"
+        ],
+        "outboundTag": "direct",
+        "type": "field"
+      },
+      {
+        "domains": [
+          "geosite:geolocation-!cn"
+        ],
+        "outboundTag": "proxy",
+        "type": "field"
+      },
+      {
+        "ip": [
+          "geoip:cn",
+          "geoip:private"
+        ],
+        "outboundTag": "direct",
+        "type": "field"
+      }
+    ]
+  }
+}

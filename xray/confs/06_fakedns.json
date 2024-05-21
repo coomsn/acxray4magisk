@@ -1,0 +1,12 @@
+{
+  "fakedns": [
+    {
+      "ipPool": "198.18.0.0/15",
+      "poolSize": 35000
+    },
+    {
+      "ipPool": "fc00::/18",
+      "poolSize": 25000
+    }
+  ]
+}

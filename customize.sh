@@ -1,14 +1,14 @@
 #!/system/bin/sh
 #####################
-# acxray Customization
+# xray Customization
 #####################
 SKIPUNZIP=1
 ASH_STANDALONE=1
 unzip_path="/data/adb"
 
 # Define the paths of source folder and the destination folder
-source_folder="/data/adb/acxray"
-destination_folder="/data/adb/acxray$(date +%Y%m%d_%H%M%S)"
+source_folder="/data/adb/xray"
+destination_folder="/data/adb/xray$(date +%Y%m%d_%H%M%S)"
 
 # Check if the source folder exists
 if [ -d "$source_folder" ]; then
@@ -23,14 +23,14 @@ else
 fi
 
 ui_print "- 正在释放文件"
-unzip -o "$ZIPFILE" 'acxray/*' -d $unzip_path >&2
-unzip -j -o "$ZIPFILE" 'acxray4magisk_service.sh' -d /data/adb/service.d >&2
+unzip -o "$ZIPFILE" 'xray/*' -d $unzip_path >&2
+unzip -j -o "$ZIPFILE" 'xray4magisk_service.sh' -d /data/adb/service.d >&2
 unzip -j -o "$ZIPFILE" 'uninstall.sh' -d $MODPATH >&2
 unzip -j -o "$ZIPFILE" "module.prop" -d $MODPATH >&2
 ui_print "- 正在设置权限"
-set_perm /data/adb/service.d/acxray4magisk_service.sh 0 0 0755
+set_perm /data/adb/service.d/xray4magisk_service.sh 0 0 0755
 set_perm $MODPATH/uninstall.sh 0 0 0755
 set_perm_recursive $MODPATH 0 0 0755 0644
-set_perm_recursive $unzip_path/acxray 0 0 0755 0755
+set_perm_recursive $unzip_path/xray 0 0 0755 0755
 ui_print "- 完成权限设置"
 ui_print "- enjoy!"

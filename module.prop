@@ -1,6 +1,6 @@
-id=acxray-module
-name=acxray4magisk
+id=xray-module
+name=xray4magisk
 version=vSoybean
-versionCode=20240515
+versionCode=20240520
 author=Tony
-description=xray4magisk, enjoy yourself. Created on May 15, 2024.
+description=xray4magisk, enjoy yourself. Created on May 20, 2024.

@@ -1,0 +1,37 @@
+{
+  "dns": {
+    "hosts": {
+      "domain:googleapis.cn": "googleapis.com",
+      "geosite:category-ads-all": "127.0.0.1",
+      "dns.google": [
+        "8.8.8.8",
+        "8.8.4.4"
+      ],
+      "dns.alidns.com": [
+        "223.5.5.5",
+        "223.6.6.6"
+      ]
+    },
+    "servers": [
+      {
+        "address": "fakedns",
+        "skipFallback": true
+      },
+      {
+        "address": "https://dns.alidns.com/dns-query",
+        "domains": [
+          "geosite:cn",
+          "geosite:private"
+        ],
+        "expectIPs": [
+          "geoip:cn",
+          "geoip:private"
+        ],
+        "skipFallback": true
+      },
+      "https://dns.google/dns-query"
+    ],
+    "queryStrategy": "UseIP",
+    "tag": "dns_inbound"
+  }
+}
