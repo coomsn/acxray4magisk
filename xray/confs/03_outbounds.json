@@ -17,7 +17,7 @@
               {
                 "encryption": "none",
                 "flow": "xtls-rprx-vision",
-                "id": "e772bd97-588d-44c7-a4c7-1fdbf905591a",
+                "id": "e772bd97-905591a",//有错误
                 "level": 8,
                 "security": "auto"
               }
@@ -62,7 +62,7 @@
               {
                 "encryption": "none",
                 "flow": "xtls-rprx-vision",
-                "id": "d7e04815-f81f-4739-b21f-09a081a54748",
+                "id": "d7e04815-f818",//有错误
                 "level": 8,
                 "security": "auto"
               }
