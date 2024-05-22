@@ -95,7 +95,7 @@ fi
 }
 executeProxyRules() {
   createProxyRules ip 100 "${IPV}" Xray "${intranet[*]}" "${uids[*]}" "${Gateway4[*]}"
-if [ ${ip6tables_switch} = true ]; then
+if [ "${ip6tables_switch}" = true ]; then
   createProxyRules "ip -6" 106 "${IP6V}" Xray6 "${intranet6[*]}" "${uids[*]}" "${Gateway6[*]}"
 fi
 }
@@ -120,9 +120,8 @@ deleteProxyRules() {
   ${3} -t mangle -X ${4}_DIVERT
 }
 executeDeleteProxyRules() {
-  if iptables-save | grep "Xray" > /dev/null; then
     deleteProxyRules ip 100 "${IPV}" Xray
-  elif [ ${ip6tables_switch} = true ]; then
+  if [ "${ip6tables_switch}" = true ]; then
     deleteProxyRules "ip -6" 106 "${IP6V}" Xray6
   fi
 }
