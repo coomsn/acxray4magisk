@@ -6,6 +6,7 @@ normal=$(printf '\033[0m'); green=$(printf '\033[0;32m'); red=$(printf '\033[91m
 
 # environment variables
 export PATH="/data/adb/magisk:/data/adb/ksu/bin:$PATH:/system/bin"
+export TZ='Asia/Shanghai'
 source ${0%/*}/settings.ini
 
 # Function to filter UIDs based on package names
@@ -21,31 +22,45 @@ uid_filter() {
 
 # Function to start the proxy
 start_proxy() {
-  if [ -f "${Bin}" ]; then
-    chmod 755 ${Bin} || { echo "Failed to set permissions on ${Bin}"; exit 1; }
-    chown root:net_admin ${Bin} || { echo "Failed to change owner of ${Bin}"; exit 1; }
+if [ -f "${Bin}" ]; then
+    chmod 755 ${Bin}
+    chown root:net_admin ${Bin}
     uid_filter
+    chain_name="${Bin##*/}"
     executeProxyRules
     executeDisable_QUIC
     ulimit -SHn 1000000
-    [[ "${Bin##*/}" == "xray" ]] && nohup busybox setuidgid ${box_user}:${box_group} ${Bin} run -confdir ${config_dir} > /dev/null 2>&1 &
-    [[ "${Bin##*/}" == "sing-box" ]] && nohup busybox setuidgid ${box_user}:${box_group} ${Bin} run -c ${config_file} -D ./binary/ > /dev/null 2>&1 &
-  else
+  case "${Bin##*/}" in
+    "xray")
+      nohup busybox setuidgid ${box_user}:${box_group} ${Bin} run -confdir ${config_dir} > /dev/null 2>&1 &
+        ;;
+    "sing-box")
+      nohup busybox setuidgid ${box_user}:${box_group} ${Bin} run -c ${config_file} -D ./binary/ > /dev/null 2>&1 &
+        ;;
+    "mihomo")
+      nohup busybox setuidgid ${box_user}:${box_group} ${Bin} -f ${config_file} -d ${work_dir} > /dev/null 2>&1 &
+        ;;
+  esac
+else
     echo "Binary ${Bin} not found"
     exit 1
-  fi
+fi
+  echo "${Bin##*/}:$(pidof ${Bin})" > ${0%/*}/pid.txt
   create_task
 }
 
 # Function to stop the proxy
 stop_proxy() {
-  delete_task
-  PID=$(pidof ${Bin})
-  pidof ${Bin} > /dev/null 2>&1 && kill -15 ${PID} > /dev/null 2>&1
+if [ -f "${0%/*}/pid.txt" ] ; then
+  chain_name=$(awk -F ':' 'NR==1 {print $1}' ${0%/*}/pid.txt)
   executeDeleteProxyRules > /dev/null 2>&1
   deleteDisable_QUIC
+  delete_task
+  kill -9 $(awk -F ':' 'NR==1 {print $2}' ${0%/*}/pid.txt)
   rm ${0%/*}/*.list
   rm ${0%/*}/logs/*.log
+  rm ${0%/*}/pid.txt
+fi
 }
 
 # Function to create TPROXY rules
@@ -82,14 +97,16 @@ fi
     ${3} -t mangle -A ${4}_LOCAL -d ${subnet} -p udp ! --dport 53 -j RETURN
     ${3} -t mangle -A ${4}_LOCAL -d ${subnet} ! -p udp -j RETURN
   done
-  if [[ "${list_mode}" == "blacklist" ]] ; then
+  
+case "${list_mode}" in
+  "blacklist")
     for appid in ${6}; do
       ${3} -t mangle -A ${4}_LOCAL -m owner --uid-owner ${appid} -p tcp -j RETURN
       ${3} -t mangle -A ${4}_LOCAL -m owner --uid-owner ${appid} -p udp ! --dport 53 -j RETURN
     done
-      ${3} -t mangle -A ${4}_LOCAL -j MARK --set-mark ${fwmark}
-  fi
-  if [[ "${list_mode}" == "whitelist" ]] ; then
+    ${3} -t mangle -A ${4}_LOCAL -j MARK --set-mark ${fwmark}
+    ;;
+  "whitelist")
     for appid in ${6}; do
       ${3} -t mangle -A ${4}_LOCAL -m owner --uid-owner ${appid} -p tcp -j MARK --set-mark ${fwmark}
       ${3} -t mangle -A ${4}_LOCAL -m owner --uid-owner ${appid} -p udp -j MARK --set-mark ${fwmark}
@@ -100,10 +117,15 @@ fi
         ${3} -t mangle -A ${4}_LOCAL -m owner --uid-owner ${AID} -p udp -j MARK --set-mark ${fwmark}
       done
     else
-        echo "Variable is empty"
+      echo "Invalid list_mode: ${list_mode}"
     fi
-  ${3} -t mangle -A ${4}_LOCAL -p udp --dport 53 -j MARK --set-mark ${fwmark}
-  fi
+    ${3} -t mangle -A ${4}_LOCAL -p udp --dport 53 -j MARK --set-mark ${fwmark}
+    ;;
+  *)
+    echo "Invalid list_mode: ${list_mode}"
+    ;;
+esac
+
   # Referencing custom chains
   ${3} -t mangle -A PREROUTING -j ${4}_EXTERNAL
   ${3} -t mangle -A OUTPUT -j ${4}_LOCAL
@@ -115,9 +137,9 @@ fi
 
 # Function to execute proxy rules
 executeProxyRules() {
-  createProxyRules ip "${table}" "${IPV}" "${Bin##*/}" "${intranet[*]}" "${uids[*]}"
+  createProxyRules ip "${table}" "${IPV}" "${chain_name}" "${intranet[*]}" "${uids[*]}"
   if [ "${ip6tables_switch}" = true ]; then
-    createProxyRules "ip -6" "$(expr ${table} \* 2)" "${IP6V}" "${Bin##*/}6" "${intranet6[*]}" "${uids[*]}"
+    createProxyRules "ip -6" "$(expr ${table} \* 2)" "${IP6V}" "${chain_name}6" "${intranet6[*]}" "${uids[*]}"
   fi
 }
 
@@ -139,9 +161,9 @@ deleteProxyRules() {
 
 # Function to execute delete proxy rules
 executeDeleteProxyRules() {
-  deleteProxyRules ip "${table}" "${IPV}" "${Bin##*/}"
+  deleteProxyRules ip "${table}" "${IPV}" "${chain_name}"
   if [ "${ip6tables_switch}" = true ]; then
-    deleteProxyRules "ip -6" "$(expr ${table} \* 2)" "${IP6V}" "${Bin##*/}6"
+    deleteProxyRules "ip -6" "$(expr ${table} \* 2)" "${IP6V}" "${chain_name}6"
   fi
 }
 
@@ -151,7 +173,7 @@ create_task() {
   if pgrep busybox crond > /dev/null; then
     kill -9 $(pgrep busybox crond)
   fi
-  echo '0 */12 * * * touch /data/adb/modules/xray-module/disable && sleep 3 && rm /data/adb/modules/xray-module/disable' > ${crontab_file}
+  echo '5 0,12 * * * touch /data/adb/modules/xray-module/disable && sleep 3 && rm /data/adb/modules/xray-module/disable' > ${crontab_file}
   nohup busybox crond -c ${0%/*}/ > /dev/null 2>&1 &
   echo -e "${green}New task:\n$(busybox crontab -l -c ${0%/*}/)${normal}"
 }
@@ -188,8 +210,8 @@ quic="disable"
   # Disable QUIC
 Disable_QUIC() {
   if [ "${quic}" = "disable" ]; then
-    ${1} ${2} OUTPUT -p udp --dport 443 -j REJECT
-    ${1} ${2} OUTPUT -p udp --dport 80 -j REJECT
+    ${1} ${2} OUTPUT -p udp --dport 443 -m owner ! --uid-owner ${box_user} ! --gid-owner ${box_group} -j REJECT
+    ${1} ${2} OUTPUT -p udp --dport 80 -m owner ! --uid-owner ${box_user} ! --gid-owner ${box_group} -j REJECT
   fi
 }
 
@@ -202,25 +224,3 @@ deleteDisable_QUIC() {
   Disable_QUIC "${IPV}" "-D"
   Disable_QUIC "${IP6V}" "-D"
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
